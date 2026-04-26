@@ -70,29 +70,24 @@ def process_frames(proc, lcd, frame_count, frame_size, height, width, rotate_ang
         raw_frame = proc.stdout.read(frame_size)
         if len(raw_frame) < frame_size:
             return frame_count, False
-        frame = np.frombuffer(raw_frame, np.uint8).reshape((height, width, 3))
-        # Fix LCD orientation: transpose and rotate 180°
-        frame = np.transpose(frame, (1, 0, 2))
-        frame = cv2.rotate(frame, cv2.ROTATE_180)
-        # Draw overlays if enabled and text is non-empty
+        frame = np.frombuffer(raw_frame, np.uint8).reshape((height, width, 3)).copy()
+        # Draw overlays BEFORE orientation transforms so LCD matches preview
         with overlay_lock:
             cpu_text = overlay_texts['cpu']
             gpu_text = overlay_texts['gpu']
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 0.5
         thickness = 1
-        # Map overlay coordinates from preview to LCD orientation (transpose + 180° rotation)
-
-
-        # Map overlay coordinates to match LCD orientation (transpose + 180° rotation)
-        # Draw CPU overlay (original preview logic)
         if cpu_overlay and cpu_text:
             x, y = cpu_overlay[1:]
             cv2.putText(frame, cpu_text, (x, y), font, font_scale, (0, 255, 255), thickness, cv2.LINE_AA)
-        # Draw GPU overlay (original preview logic)
         if gpu_overlay and gpu_text:
             x, y = gpu_overlay[1:]
             cv2.putText(frame, gpu_text, (x, y), font, font_scale, (255, 255, 0), thickness, cv2.LINE_AA)
+        # Now apply LCD orientation: transpose and rotate 180°
+        frame = np.transpose(frame, (1, 0, 2))
+        frame = cv2.rotate(frame, cv2.ROTATE_180)
+        frame = cv2.flip(frame, 0)  # Vertical flip to fix orientation
         pixel_data = rgb24_to_rgb565(frame)
         lcd.send_frame(pixel_data, width=320, height=240)
         frame_count += 1
